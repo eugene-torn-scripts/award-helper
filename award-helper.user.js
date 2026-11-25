@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Award Helper
 // @namespace    https://github.com/eugene-torn-scripts/award-helper
-// @version      1.0.0
+// @version      1.0.1
 // @description  Torn award reminders on the attack page: which weapon to finish with, armor off for Bare, special ammo, abroad wins, target bounties, daily refills, plus a progress panel. Desktop + Torn PDA.
 // @author       lannav
 // @match        https://www.torn.com/*
@@ -36,7 +36,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "1.0.0";
+    const VERSION = "1.0.1";
     const PDA_API_KEY = "###PDA-APIKEY###";
     const PDA_PLACEHOLDER = "###" + "PDA-APIKEY" + "###";
     const IS_PDA = typeof PDA_httpGet === "function";
@@ -295,7 +295,29 @@
         return `${esc(g.name)} ${fmtN(g.count)}/${fmtN(g.target)}`;
     }
 
-    function weaponOptions(ctx, equipment) {
+    function attackerArea() {
+        return document.querySelector("[class*=weaponList]");
+    }
+
+    function kickAvailable() {
+        const area = attackerArea();
+        return !!(area && area.querySelector("#weapon_boots, #attacker_Kick, #attacker_Boots"));
+    }
+
+    function waitFor(fn, ms) {
+        return new Promise((resolve) => {
+            const t0 = Date.now();
+            const tick = () => {
+                const v = fn();
+                if (v || Date.now() - t0 > ms) return resolve(v);
+                setTimeout(tick, 200);
+                return undefined;
+            };
+            tick();
+        });
+    }
+
+    function weaponOptions(ctx, equipment, hasKick) {
         const leonidasOpen = !ctx.has(AW.leonidas);
         const opts = [];
         for (const it of equipment) {
@@ -303,10 +325,13 @@
             const key = SUB_TYPE_KEY[it.sub_type];
             if (key) opts.push({ slots: [it.slot], label: `${SLOT_NAME[it.slot]}: ${it.name}`, key, weapon: true });
         }
-        if (leonidasOpen) {
+        if (leonidasOpen && hasKick) {
             opts.push({ slots: ["kick"], label: "Kick", key: "hand_to_hand", kick: true });
-        } else {
+            opts.push({ slots: ["fists"], label: "Fists", key: "hand_to_hand" });
+        } else if (hasKick) {
             opts.push({ slots: ["fists", "kick"], label: "Fists or Kick", key: "hand_to_hand" });
+        } else {
+            opts.push({ slots: ["fists"], label: "Fists", key: "hand_to_hand" });
         }
         for (const o of opts) {
             const cat = FINISH.find((f) => f.key === o.key);
@@ -331,16 +356,20 @@
         const eq = data.equipment;
 
         if (settings.weapon && eq) {
-            const opts = weaponOptions(ctx, eq);
+            const opts = weaponOptions(ctx, eq, data.hasKick);
             const useful = opts.filter((o) => o.goals.length).sort((a, b) => a.rank - b.rank);
+            const isMain = (o) => o.goals.some((g) => g.tier <= 1);
             if (useful.length) {
                 const [top, ...rest] = useful;
                 lines.push({ level: "ok", html: `🎯 Finish with <b>${esc(top.label)}</b>: ${top.goals.map(goalText).join(" · ")}` });
-                highlights.push({ slots: top.slots, strength: "strong" });
+                if (isMain(top)) highlights.push({ slots: top.slots, strength: "strong" });
                 for (const o of rest.slice(0, 3)) {
                     lines.push({ level: "info", html: `Also: <b>${esc(o.label)}</b>: ${o.goals.map(goalText).join(" · ")}` });
-                    highlights.push({ slots: o.slots, strength: "soft" });
+                    if (isMain(o)) highlights.push({ slots: o.slots, strength: "soft" });
                 }
+            }
+            if (!data.hasKick && !ctx.has(AW.leonidas)) {
+                lines.push({ level: "info", html: "Leonidas needs a finishing hit with <b>Kick</b>. Your attack page has no Kick slot now." });
             }
             const weaponHelps = opts.some((o) => o.weapon && o.goals.some((g) => g.tier <= 1));
             if (!weaponHelps) {
@@ -508,7 +537,7 @@
         },
         place() {
             if (!this.el) this.build();
-            const root = document.getElementById("react-root");
+            const root = document.getElementById("attack-root") || document.getElementById("react-root");
             if (root && root.parentNode) {
                 if (this.el.nextSibling !== root) root.parentNode.insertBefore(this.el, root);
                 this.el.classList.remove("ah-fixed");
@@ -533,8 +562,10 @@
     }
 
     function slotWrapper(slot) {
+        const area = attackerArea();
+        if (!area) return null;
         for (const sel of SLOT_SELECTORS[slot] || []) {
-            const el = document.querySelector(sel);
+            const el = area.querySelector(sel);
             if (el) return el.closest("[class*='weaponWrapper']") || el;
         }
         return null;
@@ -597,6 +628,7 @@
             }
             Banner.render([{ level: "info", html: "Loading…" }]);
             try {
+                const domReady = waitFor(attackerArea, 8000);
                 const ctx = await loadCore(fresh ? 0 : 30_000);
                 const settled = await Promise.allSettled([
                     Api.get("/user/equipment", fresh ? 0 : 15_000),
@@ -606,7 +638,10 @@
                 ]);
                 if (runId !== this.runId) return;
                 const val = (r) => (r.status === "fulfilled" ? r.value : null);
+                await domReady;
+                if (runId !== this.runId) return;
                 const data = {
+                    hasKick: kickAvailable(),
                     equipment: val(settled[0])?.equipment || null,
                     ammo: val(settled[1])?.ammo || [],
                     profile: val(settled[2])?.profile || null,
