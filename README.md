@@ -2,6 +2,8 @@
 
 Torn userscript that helps you collect awards (merits) faster with the energy and nerve you already spend.
 
+**Install:** open https://raw.githubusercontent.com/eugene-torn-scripts/award-helper/main/award-helper.user.js with Tampermonkey / Violentmonkey installed (Torn PDA: add it as a userscript from that URL).
+
 ## Attack page
 - **Finish with** – highlights the weapon slot that counts for the closest open finishing-hit award (Slasher, Unarmed, Leonidas kick, Stumped, Machinist, …; War Machine after 100).
 - **Warns** when none of your equipped weapons counts for an open finishing-hit award.

@@ -9,6 +9,9 @@
 // @grant        unsafeWindow
 // @connect      api.torn.com
 // @license      GPL-3.0-or-later
+// @homepageURL  https://github.com/eugene-torn-scripts/award-helper
+// @downloadURL  https://raw.githubusercontent.com/eugene-torn-scripts/award-helper/main/award-helper.user.js
+// @updateURL    https://raw.githubusercontent.com/eugene-torn-scripts/award-helper/main/award-helper.user.js
 // ==/UserScript==
 
 /*
