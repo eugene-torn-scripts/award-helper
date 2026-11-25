@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Award Helper
 // @namespace    https://github.com/eugene-torn-scripts/award-helper
-// @version      1.0.1
+// @version      1.0.2
 // @description  Torn award reminders on the attack page: which weapon to finish with, armor off for Bare, special ammo, abroad wins, target bounties, daily refills, plus a progress panel. Desktop + Torn PDA.
 // @author       lannav
 // @match        https://www.torn.com/*
@@ -36,7 +36,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "1.0.1";
+    const VERSION = "1.0.2";
     const PDA_API_KEY = "###PDA-APIKEY###";
     const PDA_PLACEHOLDER = "###" + "PDA-APIKEY" + "###";
     const IS_PDA = typeof PDA_httpGet === "function";
@@ -460,6 +460,19 @@
             }
         }
 
+        if (settings.bounty && Array.isArray(data.bounties)) {
+            const count = num(dig(ctx.ps, "bounties.collected.amount"));
+            const value = num(dig(ctx.ps, "bounties.collected.value"));
+            const openTier = nextTier(ctx, BOUNTY_TIERS, count);
+            const moneyOpen = !ctx.done(AW.deadOrAlive, value);
+            if (!data.bounties.length && (openTier || moneyOpen)) {
+                const goal = openTier ? `${openTier.name} ${fmtN(count)}/${fmtN(openTier.target)}` : `Dead Or Alive ${money(value)}/$10M`;
+                lines.unshift({
+                    level: "warn",
+                    html: `⚠ Target has <b>no bounty</b>. This win will not count for ${goal}. A bounty placed in the last 5 minutes may not show yet.`,
+                });
+            }
+        }
         if (settings.bounty && data.bounties && data.bounties.length) {
             const count = num(dig(ctx.ps, "bounties.collected.amount"));
             const value = num(dig(ctx.ps, "bounties.collected.value"));
@@ -645,7 +658,7 @@
                     equipment: val(settled[0])?.equipment || null,
                     ammo: val(settled[1])?.ammo || [],
                     profile: val(settled[2])?.profile || null,
-                    bounties: val(settled[3])?.bounties || [],
+                    bounties: Array.isArray(val(settled[3])?.bounties) ? val(settled[3]).bounties : null,
                 };
                 const { lines, highlights } = buildLines(ctx, data, s);
                 if (!data.equipment && settled[0].status === "rejected") {
